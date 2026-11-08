@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# TaskFlow local artifacts
+node_modules/
+*.tsbuildinfo
+.env.*
+!.env.example
+.python/
+playwright-report/
+test-results/
