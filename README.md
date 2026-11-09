@@ -6,8 +6,8 @@ No authentication, cloud resources, or Kubernetes deployment is included.
 
 ```mermaid
 flowchart LR
-    Browser[Browser · React SPA] -->|REST / JSON| API[FastAPI · Python 3.13]
-    Nginx[Nginx · frontend container] -->|Static assets / SPA routing| Browser
+    Browser[Browser · React SPA] -->|same-origin /api| Nginx[Nginx · frontend container]
+    Nginx -->|Docker network| API[FastAPI · Python 3.13]
     API -->|SQLAlchemy / psycopg| DB[(PostgreSQL 17)]
     Alembic[Alembic migrations at backend startup] --> DB
 ```
@@ -77,13 +77,12 @@ docker compose down
 | --- | --- |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Database initialization and backend connection; required by Compose |
 | `FRONTEND_PORT`, `BACKEND_PORT` | Published local ports (8080 / 8000) |
-| `VITE_API_URL` | Browser-facing API origin, compiled into the frontend at build time |
 | `CORS_ORIGINS` | JSON array of allowed browser origins |
 | `DATABASE_URL` | Required by the standalone backend and Alembic; Compose constructs it from database settings |
 
 Use URL-safe database credentials (letters, numbers, hyphens) with the Compose URL template.
 For standalone URLs, percent-encode reserved password characters.
-If changing browser ports, update `VITE_API_URL` and `CORS_ORIGINS` too, then rebuild the frontend.
+The frontend calls `/api` on its own origin. Nginx forwards those requests to `backend:8000` on the Compose network; Vite forwards them to `localhost:8000` during standalone development. The browser never needs to resolve the Docker service name or connect directly to port 8000. `VITE_API_URL` is no longer used; remove it from an existing `.env` if present. Changing the frontend port does not require rebuilding the API address. Update `CORS_ORIGINS` if you make direct cross-origin API calls from another origin.
 Database initialization variables only apply to a new volume; changing `.env` does not change an existing database password.
 No credentials belong in source control; `.env` is ignored.
 
@@ -115,11 +114,10 @@ In another terminal:
 ```sh
 cd frontend
 npm ci
-# Optional frontend/.env.local: VITE_API_URL=http://localhost:8000
 npm run dev
 ```
 
-Browse http://localhost:5173. CORS defaults permit both documented frontend origins.
+Browse http://localhost:5173. The Vite development server proxies `/api` to the backend on port 8000.
 
 ## Migrations
 
@@ -187,7 +185,6 @@ The migration round-trip always uses a separate temporary SQLite file.
 - No real-time collaboration, optimistic conflict detection, attachments, or task ordering within columns. Cards show newest first.
 - Compose is for local development. Startup migrations assume one backend instance; production should run migrations as a separate release job.
 - Images use version-family tags; pin immutable digests and add dependency scanning for production releases.
-- Browser API configuration is baked into assets; rebuilding is required when its origin changes.
 - Next: CI for tests/lint/build and PostgreSQL migration checks, image publishing/scanning, then reviewed Terraform/EKS/Helm and monitoring work. Nothing provisions AWS in this version.
 
 ### Browser smoke test
@@ -210,17 +207,11 @@ then deletes its own project. Run against a development instance.
 A nested minimatch override in `frontend/package.json` keeps TypeScript ESLint's glob
 matcher on its patched release; lint/type checking are verified with this override.
 
-### Validation performed in the development environment
+### Validation performed for the API connectivity fix
 
-- Python 3.13: 12 Pytest cases passed with SQLite, including readiness failure handling.
-- PostgreSQL 17: 11 Pytest cases passed before the additional readiness failure test was added.
-- PostgreSQL migration upgrade → schema check → downgrade → upgrade passed on a disposable database.
-- Ruff lint and format checks, frontend ESLint, TypeScript check, and production build passed.
-- Both Docker images built; all three Compose services started; `/ready` returned ready.
-- Chromium smoke passed against the final Compose-served frontend and real API/database.
-- `alembic current` reported `0001 (head)` and `alembic check` reported no drift.
-- `npm audit` reported zero vulnerabilities. Pytest emits one upstream AnyIO/Starlette deprecation warning.
-
-Managed-cloud Docker builds used a temporary, external Compose override to pass the host CA
-bundle as the optional `proxy_ca` BuildKit secret. It is not baked into either image and
-is not required for ordinary local Docker builds.
+- Python 3.13: 13 Pytest cases passed with isolated SQLite databases; Ruff lint and format checks passed.
+- Frontend ESLint and TypeScript checks passed; the production Docker frontend image built.
+- All three Compose services were running; backend and PostgreSQL were healthy and `/ready` returned 200.
+- PostgreSQL reported migration `0001 (head)`.
+- Chromium smoke passed against the rebuilt Compose frontend, including project and task creation, a simulated 422 validation response, task retrieval, and reload persistence.
+- Pytest emits one upstream AnyIO/Starlette deprecation warning.

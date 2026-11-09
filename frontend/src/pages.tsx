@@ -44,7 +44,7 @@ export function Overview({
         title="A little clarity. A lot of progress."
         subtitle="Welcome back. Here’s what’s happening across your workspace."
         action={
-          <button className="primary" onClick={createTask}>
+          <button className="primary" onClick={() => createTask()}>
             <Plus size={18} />
             New task
           </button>
@@ -127,7 +127,7 @@ export function Overview({
                     <CheckCheck size={34} />
                     <h3>A clear board, a fresh beginning</h3>
                     <p>Add your first task and get into flow.</p>
-                    <button className="secondary" onClick={createTask}>
+                    <button className="secondary" onClick={() => createTask()}>
                       Create a task
                     </button>
                   </div>

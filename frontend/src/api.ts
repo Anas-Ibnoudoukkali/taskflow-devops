@@ -31,10 +31,21 @@ export interface Dashboard {
   overdue_tasks: number;
   recent_tasks: Task[];
 }
-const base = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
+function errorMessage(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .filter((issue): issue is { loc?: unknown; msg: string } =>
+        !!issue && typeof issue.msg === "string",
+      )
+      .map((issue) => {
+        const field = Array.isArray(issue.loc) ? issue.loc.at(-1) : undefined;
+        return typeof field === "string" ? `${field}: ${issue.msg}` : issue.msg;
+      });
+    return messages.length ? messages.join("; ") : null;
+  }
+  return null;
+}
 export async function api<T>(
   path: string,
   method = "GET",
@@ -42,22 +53,21 @@ export async function api<T>(
 ): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${base}${path}`, {
+    response = await fetch(path, {
       method,
       headers: data ? { "Content-Type": "application/json" } : {},
       body: data ? JSON.stringify(data) : undefined,
     });
-  } catch {
-    throw new Error(
-      "Cannot connect to TaskFlow. Check that the API is running.",
-    );
+  } catch (cause) {
+    console.error("TaskFlow request failed", { method, path, cause });
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`Could not send ${method} ${path}: ${reason}`);
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(
-      typeof body?.detail === "string"
-        ? body.detail
-        : "Unable to save. Check your fields and try again.",
+      errorMessage(body?.detail) ||
+        `Request failed (${response.status}). Check your fields and try again.`,
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();

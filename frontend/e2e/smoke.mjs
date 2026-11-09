@@ -38,10 +38,44 @@ try {
   const response = await http.get("/api/projects");
   projectId = (await response.json()).find((p) => p.name === name)?.id;
   assert.ok(projectId, "Project was persisted through the API");
+  await page.goto(frontend);
+  await page.getByRole("button", { name: "Create a task", exact: true }).click();
+  await page.getByLabel("Task title").fill("Overview task creation");
+  assert.equal(await page.getByLabel("Project", { exact: true }).inputValue(), String(projectId));
+  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  const overviewTask = (await (await http.get(`/api/tasks?project_id=${projectId}`)).json()).find(
+    (item) => item.title === "Overview task creation",
+  );
+  assert.ok(overviewTask, "Overview task was persisted through the API");
+  assert.equal((await http.delete(`/api/tasks/${overviewTask.id}`)).status(), 204);
+  await page.goto(`${frontend}/projects`);
   await page.getByRole("link", { name, exact: false }).first().click();
   await page.getByRole("button", { name: "New task", exact: true }).click();
   await page.getByLabel("Task title").fill("Ship browser-tested TaskFlow");
   await page.getByLabel("Priority", { exact: true }).selectOption("high");
+  await page.route("**/api/tasks", (route) => route.abort("failed"));
+  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page.getByText(/Could not send POST \/api\/tasks:/).waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 1);
+  await page.unroute("**/api/tasks");
+  await page.route("**/api/tasks", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          detail: [{ loc: ["body", "title"], msg: "Title is invalid" }],
+        }),
+      });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page.getByText("title: Title is invalid", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 1);
+  await page.unroute("**/api/tasks");
   await page.getByRole("button", { name: "Create task", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   await page

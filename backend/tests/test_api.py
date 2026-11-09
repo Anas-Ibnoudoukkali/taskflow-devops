@@ -119,6 +119,23 @@ def test_invalid_tasks_and_missing_resources(client):
     assert client.patch(f"/api/projects/{pid}", json={"name": None}).status_code == 422
 
 
+def test_task_creation_can_be_read_and_validation_is_specific(client):
+    pid = project(client, "API workflow")
+    created = client.post(
+        "/api/tasks",
+        json={"project_id": pid, "title": "Persist this task", "priority": "high"},
+    )
+    assert created.status_code == 201
+    item = created.json()
+    assert item["project_id"] == pid
+    assert client.get(f"/api/tasks/{item['id']}").json() == item
+    assert item in client.get(f"/api/tasks?project_id={pid}").json()
+
+    invalid = client.post("/api/tasks", json={"project_id": pid, "title": " "})
+    assert invalid.status_code == 422
+    assert any(issue["loc"][-1] == "title" for issue in invalid.json()["detail"])
+
+
 def test_health_and_cors(client):
     assert client.get("/health").json() == {"status": "ok"}
     result = client.options(
