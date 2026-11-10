@@ -178,6 +178,25 @@ create a **dedicated disposable database** (never use your application database)
 API fixtures create and **drop all application tables** in the selected test database for each test.
 The migration round-trip always uses a separate temporary SQLite file.
 
+## CI and container images
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`:
+
+- **Backend checks:** Python 3.13, Pytest, Ruff lint, and Ruff format check.
+- **Frontend checks:** Node.js 22, `npm ci`, ESLint, TypeScript typecheck, and production build.
+- **Publish GHCR images:** after both check jobs succeed on a push to `main`, builds the existing Dockerfiles and pushes each image with the full commit SHA and `latest` tags. Pull requests never publish. The publish job alone has `packages: write`; all jobs have `contents: read`.
+
+After a successful `main` run, find the packages under the repository's **Packages** sidebar or the owner's **Packages** tab. For this repository, the image names are:
+
+```text
+ghcr.io/anas-ibnoudoukkali/taskflow-backend:<commit-sha>
+ghcr.io/anas-ibnoudoukkali/taskflow-frontend:<commit-sha>
+```
+
+Both also receive the `latest` tag. Use the SHA tag for a future EKS rollout so the deployed image is fixed to a specific commit. Images are not published until this workflow runs successfully on `main`.
+
+To allow public pulls, open each package's **Package settings** → **Danger Zone** → **Change visibility** → **Public**. Repeat for both images. Public GHCR container packages can then be pulled without registry credentials. GitHub notes that making a package public cannot be reversed to private; review each package before changing visibility. See [GitHub's package visibility guide](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility) and [container registry guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
 ## Limitations and next steps
 
 - Single user, no authentication or authorization. Keep the application local until access control is added.
@@ -185,7 +204,7 @@ The migration round-trip always uses a separate temporary SQLite file.
 - No real-time collaboration, optimistic conflict detection, attachments, or task ordering within columns. Cards show newest first.
 - Compose is for local development. Startup migrations assume one backend instance; production should run migrations as a separate release job.
 - Images use version-family tags; pin immutable digests and add dependency scanning for production releases.
-- Next: CI for tests/lint/build and PostgreSQL migration checks, image publishing/scanning, then reviewed Terraform/EKS/Helm and monitoring work. Nothing provisions AWS in this version.
+- Next: PostgreSQL migration checks and image scanning in CI, then reviewed Terraform/EKS/Helm and monitoring work. Nothing provisions AWS in this version.
 
 ### Browser smoke test
 

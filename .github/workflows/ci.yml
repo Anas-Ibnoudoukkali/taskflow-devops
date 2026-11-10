@@ -1,0 +1,91 @@
+name: CI
+
+'on':
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: ruff check .
+      - run: ruff format --check .
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  publish:
+    name: Publish images to Amazon ECR
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::882464895076:role/TaskFlowGitHubECRRole
+          aws-region: eu-west-3
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker images
+        env:
+          REGISTRY: 882464895076.dkr.ecr.eu-west-3.amazonaws.com
+        run: |
+          set -euo pipefail
+
+          docker build \
+            -t "$REGISTRY/taskflow-backend:$GITHUB_SHA" \
+            -t "$REGISTRY/taskflow-backend:latest" \
+            ./backend
+
+          docker build \
+            -t "$REGISTRY/taskflow-frontend:$GITHUB_SHA" \
+            -t "$REGISTRY/taskflow-frontend:latest" \
+            ./frontend
+
+          docker push "$REGISTRY/taskflow-backend:$GITHUB_SHA"
+          docker push "$REGISTRY/taskflow-backend:latest"
+
+          docker push "$REGISTRY/taskflow-frontend:$GITHUB_SHA"
+          docker push "$REGISTRY/taskflow-frontend:latest"
