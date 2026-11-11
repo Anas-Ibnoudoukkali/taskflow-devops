@@ -21,7 +21,7 @@ spec:
         - name: backend
           command: ["uvicorn"]
           args: ["app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-          image: ghcr.io/anas-ibnoudoukkali/taskflow-backend:v1
+          image: 882464895076.dkr.ecr.eu-west-3.amazonaws.com/taskflow-backend:latest
           imagePullPolicy: IfNotPresent
 
           ports:

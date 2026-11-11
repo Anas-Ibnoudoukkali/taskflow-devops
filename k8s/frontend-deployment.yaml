@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/anas-ibnoudoukkali/taskflow-frontend:v1
+          image: 882464895076.dkr.ecr.eu-west-3.amazonaws.com/taskflow-frontend:latest
           imagePullPolicy: IfNotPresent
 
           ports:
